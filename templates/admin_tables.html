@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h3>Database Tables</h3>
+
+<ul class="list-group">
+  {% for t in tables %}
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <strong>{{ t.label }}</strong>
+        <div class="small text-muted">{{ t.name }}</div>
+      </div>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('admin.view_table', table_name=t.name) }}">
+        View
+      </a>
+    </li>
+  {% endfor %}
+</ul>
+{% endblock %}

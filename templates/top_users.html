@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h3 class="mb-2">📊 {{ title }}</h3>
+<p class="text-muted">Ranked list of customers based on risk profile</p>
+
+<!-- 🔢 SUMMARY -->
+<div class="row g-2 mb-3">
+  <div class="col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <div class="small text-muted">Total</div>
+        <div class="h5">{{ items|length }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card shadow-sm text-center">
+      <div class="card-body">
+        <div class="small text-muted">High/Critical</div>
+        <div class="h5 text-danger">
+          {{ items | selectattr('risk_classification', 'in', ['High','Critical']) | list | length }}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 📋 TABLE -->
+<div class="card shadow-sm rounded-4">
+  <div class="card-body">
+
+    <div class="table-responsive">
+      <table class="table align-middle">
+
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Customer</th>
+            <th>Risk Score</th>
+            <th>Classification</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+
+        <tbody>
+        {% for x in items %}
+
+          <tr class="{% if x.risk_classification == 'Critical' %}table-danger{% endif %}">
+
+            <!-- 🔢 RANK -->
+            <td>
+              <span class="badge bg-dark">{{ loop.index }}</span>
+            </td>
+
+            <!-- 👤 CUSTOMER -->
+            <td>
+              <a href="{{ url_for('main.customer_profile', customer_id=x.customer_id) }}">
+                {{ x.customer_id }}
+              </a>
+            </td>
+
+            <!-- 📊 SCORE -->
+            <td>
+              <span class="fw-bold
+                {% if x.risk_score > 80 %}text-danger
+                {% elif x.risk_score > 50 %}text-warning
+                {% else %}text-success{% endif %}">
+                {{ x.risk_score }}
+              </span>
+            </td>
+
+            <!-- 🚨 CLASS -->
+            <td>
+              <span class="badge
+                {% if x.risk_classification == 'Critical' %}bg-danger
+                {% elif x.risk_classification == 'High' %}bg-warning
+                {% else %}bg-success{% endif %}">
+                {{ x.risk_classification }}
+              </span>
+            </td>
+
+            <!-- 💡 REASON -->
+            <td class="small text-muted">
+              {{ x.reason_summary }}
+            </td>
+
+          </tr>
+
+        {% endfor %}
+        </tbody>
+
+      </table>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}

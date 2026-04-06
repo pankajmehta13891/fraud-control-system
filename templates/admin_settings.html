@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h3 class="mb-3">⚙️ Risk Engine Configuration</h3>
+<p class="text-muted">Control fraud detection rules, thresholds, and scoring weights</p>
+
+<form method="post">
+
+<!-- ================= RULE WEIGHTS ================= -->
+<div class="card shadow-sm rounded-4 mb-4">
+  <div class="card-body">
+
+    <h5>🧩 Rule Weights</h5>
+    <p class="text-muted small">Adjust how much each rule contributes to fraud score</p>
+
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th>Rule</th>
+            <th>Description</th>
+            <th>Weight</th>
+          </tr>
+        </thead>
+
+        <tbody>
+        {% for r in rules %}
+          <tr>
+            <td><b>{{ r.rule_name }}</b></td>
+            <td class="text-muted small">{{ r.description or '—' }}</td>
+            <td style="max-width:120px;">
+              <input 
+                type="number" 
+                min="0" 
+                max="100"
+                class="form-control"
+                name="{{ r.rule_name }}"
+                value="{{ r.rule_value }}">
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= SCORING CONFIG ================= -->
+<div class="card shadow-sm rounded-4 mb-4">
+  <div class="card-body">
+
+    <h5>🧠 Scoring Engine</h5>
+
+    <div class="row">
+
+      <div class="col-md-6">
+        <label class="form-label">Rule Weight (%)</label>
+        <input type="number" class="form-control" name="rule_weight" value="{{ config.rule_weight or 60 }}">
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">ML Weight (%)</label>
+        <input type="number" class="form-control" name="ml_weight" value="{{ config.ml_weight or 40 }}">
+      </div>
+
+    </div>
+
+    <div class="form-text mt-2">
+      Final Score = Rule Score * Rule Weight + ML Score * ML Weight
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= THRESHOLDS ================= -->
+<div class="card shadow-sm rounded-4 mb-4">
+  <div class="card-body">
+
+    <h5>🚨 Risk Thresholds</h5>
+
+    <div class="row">
+
+      <div class="col-md-3">
+        <label>Safe (&lt;)</label>
+        <input type="number" class="form-control" name="safe_limit" value="{{ config.safe_limit or 25 }}">
+      </div>
+
+      <div class="col-md-3">
+        <label>Suspicious (&lt;)</label>
+        <input type="number" class="form-control" name="suspicious_limit" value="{{ config.suspicious_limit or 50 }}">
+      </div>
+
+      <div class="col-md-3">
+        <label>High Risk (&lt;)</label>
+        <input type="number" class="form-control" name="high_limit" value="{{ config.high_limit or 75 }}">
+      </div>
+
+      <div class="col-md-3">
+        <label>Critical (&gt;=)</label>
+        <input type="number" class="form-control" name="critical_limit" value="{{ config.critical_limit or 75 }}">
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= ACTION POLICY ================= -->
+<div class="card shadow-sm rounded-4 mb-4">
+  <div class="card-body">
+
+    <h5>🎯 Action Policy</h5>
+
+    <div class="row">
+
+      <div class="col-md-6">
+        <label>High Risk Action</label>
+        <select class="form-select" name="high_action">
+          <option value="CALL">Call Customer</option>
+          <option value="ESCALATE">Escalate</option>
+        </select>
+      </div>
+
+      <div class="col-md-6">
+        <label>Critical Action</label>
+        <select class="form-select" name="critical_action">
+          <option value="FREEZE">Freeze Account</option>
+          <option value="ESCALATE">Escalate</option>
+        </select>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= SAVE ================= -->
+<div class="text-end">
+  <button class="btn btn-dark px-4">💾 Save Configuration</button>
+</div>
+
+</form>
+
+{% endblock %}

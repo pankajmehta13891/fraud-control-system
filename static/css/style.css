@@ -1,0 +1,41 @@
+:root {
+  --navy: #0b1f3a;
+  --accent: #1d4ed8;
+  --soft: #f4f7fb;
+}
+body.bg-soft { background: var(--soft); }
+body.login-bg { background: linear-gradient(135deg, #0b1f3a, #12376a); min-height: 100vh; }
+.navy { background: var(--navy); }
+.sidebar {
+  min-height: calc(100vh - 56px);
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
+}
+.sidebar .nav-link {
+  color: #1f2937;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.sidebar .nav-link:hover {
+  background: #eff6ff;
+  color: var(--accent);
+}
+.metric-card {
+  border: 0;
+  border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(15,23,42,.06);
+}
+.metric {
+  font-size: 2rem;
+  font-weight: 700;
+}
+.card {
+  border: 0;
+}
+.table td, .table th {
+  vertical-align: middle;
+}
+.chart-container {
+  height: 300px;
+  position: relative;
+}

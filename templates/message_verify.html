@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row g-3">
+
+  <!-- 📝 INPUT -->
+  <div class="col-lg-5">
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body">
+
+        <h4>📩 Message Verification</h4>
+
+        <form method="post">
+
+          <div class="mb-2">
+            <label class="form-label">Customer</label>
+            <select name="customer_id" class="form-select">
+              <option value="">-- None --</option>
+              {% for c in customers %}
+                <option value="{{ c.id }}">{{ c.full_name }} ({{ c.customer_ref }})</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-2">
+              <label>Sender Name</label>
+              <input class="form-control" name="sender_name">
+            </div>
+            <div class="col-md-6 mb-2">
+              <label>Sender ID</label>
+              <input class="form-control" name="sender_id">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-2">
+              <label>Phone/Email</label>
+              <input class="form-control" name="phone_or_email">
+            </div>
+            <div class="col-md-6 mb-2">
+              <label>Channel</label>
+              <select name="channel" class="form-select">
+                <option>SMS</option>
+                <option>Email</option>
+                <option>WhatsApp</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-2">
+            <label>Message Body</label>
+            <textarea name="body" class="form-control" rows="7" required></textarea>
+          </div>
+
+          <button class="btn btn-primary w-100">🔍 Analyze Message</button>
+
+        </form>
+
+      </div>
+    </div>
+
+    <!-- 🔥 RESULT -->
+    {% if result %}
+    <div class="card shadow-sm rounded-4 mt-3">
+      <div class="card-body">
+
+        <h5>🧠 Analysis Result</h5>
+
+        <!-- BIG DECISION BLOCK -->
+        <div class="p-3 rounded-3 text-center
+          {% if result.risk_category == 'Fraud' %}bg-danger text-white
+          {% elif result.risk_category == 'Suspicious' %}bg-warning
+          {% else %}bg-success text-white{% endif %}">
+
+          <div class="small">Risk Score</div>
+          <div class="display-5 fw-bold">{{ result.risk_score }}</div>
+          <div class="fw-semibold">{{ result.risk_category }}</div>
+
+        </div>
+
+        <!-- DETAILS -->
+        <div class="mt-3 small">
+          <div>📊 Scam Probability: <b>{{ '%.2f'|format(result.scam_probability) }}</b></div>
+          <div>⚙️ Rule Score: {{ result.rule_score }}</div>
+          <div>🤖 Model Score: {{ '%.2f'|format(result.model_probability) }}</div>
+        </div>
+
+        <!-- 💡 RECOMMENDATION -->
+        <div class="mt-2">
+          <strong>Recommendation:</strong> {{ result.action_recommendation }}
+        </div>
+
+        <!-- ⚡ QUICK ACTIONS -->
+        <div class="mt-3 d-flex gap-2 flex-wrap">
+
+          <form method="post" action="{{ url_for('main.create_alert_from_message') }}">
+            <input type="hidden" name="message_id" value="{{ result.message_id }}">
+            <button class="btn btn-danger btn-sm">🚨 Create Alert</button>
+          </form>
+
+          <form method="post" action="{{ url_for('main.mark_message_safe') }}">
+            <input type="hidden" name="message_id" value="{{ result.message_id }}">
+            <button class="btn btn-success btn-sm">✅ Mark Safe</button>
+          </form>
+
+        </div>
+
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+
+  <!-- 📊 HISTORY -->
+  <div class="col-lg-7">
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body">
+
+        <h4>📚 Recent Reviews</h4>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+
+            <thead>
+              <tr>
+                <th>Sender</th>
+                <th>Message</th>
+                <th>Risk</th>
+              </tr>
+            </thead>
+
+            <tbody>
+            {% for m in messages %}
+              {% set p = preds.get(m.id) %}
+
+              <tr class="{% if p and p.risk_category == 'Fraud' %}table-danger{% endif %}">
+
+                <td>{{ m.sender_name }}</td>
+
+                <td class="small text-wrap" style="max-width: 450px;">{{ m.body }}</td>
+
+                <td>
+                  {% if p %}
+                    <span class="badge
+                      {% if p.risk_category == 'Fraud' %}bg-danger
+                      {% elif p.risk_category == 'Suspicious' %}bg-warning
+                      {% else %}bg-success{% endif %}">
+                      {{ p.risk_score }}
+                    </span>
+                  {% else %}-{% endif %}
+                </td>
+
+              </tr>
+
+            {% endfor %}
+            </tbody>
+
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

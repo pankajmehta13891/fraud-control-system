@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="row g-3">
+
+  <!-- 🧑 CUSTOMER SUMMARY -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body">
+
+        <h4>{{ customer.full_name }}</h4>
+        <div class="small text-muted">{{ customer.customer_ref }}</div>
+
+        <hr>
+
+        <div><strong>Account:</strong> {{ customer.account_masked }}</div>
+        <div><strong>Phone:</strong> {{ customer.phone_masked }}</div>
+        <div><strong>KYC:</strong> {{ customer.kyc_status }}</div>
+        <div><strong>Status:</strong> {{ customer.account_status }}</div>
+
+        <!-- 🔥 RISK BLOCK -->
+        <div class="mt-3 p-3 rounded-3
+          {% if risk.classification == 'Critical' %}bg-danger text-white
+          {% elif risk.classification == 'High' %}bg-warning
+          {% else %}bg-light{% endif %}">
+
+          <div class="small">Risk Score</div>
+          <div class="display-5 fw-bold">{{ risk.risk_score }}</div>
+          <div class="fw-semibold">{{ risk.classification }}</div>
+
+          <div class="small mt-2">
+            {{ risk.reasons|join(', ') }}
+          </div>
+        </div>
+
+        <!-- ⚡ QUICK ACTIONS -->
+        <div class="mt-3 d-grid gap-2">
+
+  <form method="post" action="{{ url_for('main.call_customer_profile', customer_id=customer.id) }}">
+    <button class="btn btn-primary">📞 Call Customer</button>
+  </form>
+
+  <form method="post" action="{{ url_for('main.freeze_account_profile', customer_id=customer.id) }}">
+    <button class="btn btn-danger">🧊 Freeze Account</button>
+  </form>
+
+  <form method="post" action="{{ url_for('main.request_kyc_profile', customer_id=customer.id) }}">
+    <button class="btn btn-warning">📄 Request KYC</button>
+  </form>
+
+</div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- 📊 DETAILS -->
+  <div class="col-lg-8">
+
+    <!-- 🚨 ALERTS -->
+    <div class="card shadow-sm rounded-4 mb-3">
+      <div class="card-body">
+        <h5>🚨 Linked Alerts</h5>
+
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr><th>Type</th><th>Severity</th><th>Status</th><th>Last Action</th></tr>
+          </thead>
+          <tbody>
+          {% for a in alerts %}
+            <tr class="{% if a.severity == 'Critical' %}table-danger{% endif %}">
+              <td>{{ a.alert_type }}</td>
+              <td><span class="badge bg-danger">{{ a.severity }}</span></td>
+              <td>{{ a.status }}</td>
+              <td class="small">{{ a.last_action }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+
+    <!-- 💬 MESSAGES -->
+    <div class="card shadow-sm rounded-4 mb-3">
+      <div class="card-body">
+        <h5>💬 Suspicious Messages</h5>
+
+        <table class="table table-sm">
+          <thead><tr><th>Message</th><th>Channel</th></tr></thead>
+          <tbody>
+          {% for m in messages %}
+            <tr>
+              <td class="small text-wrap" style="max-width: 1450px;">{{ m.body }}</td>
+              <td><span class="badge bg-secondary">{{ m.channel }}</span></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+
+    <!-- 💳 TRANSACTIONS -->
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body">
+        <h5>💳 Transactions</h5>
+
+        <table class="table table-sm align-middle">
+          <thead><tr><th>Ref</th><th>Type</th><th>Amount</th><th>Beneficiary</th></tr></thead>
+          <tbody>
+          {% for t in txns %}
+            <tr>
+              <td>{{ t.txn_ref }}</td>
+              <td>{{ t.txn_type }}</td>
+              <td>
+                <span class="{% if t.amount > 100000 %}text-danger fw-bold{% endif %}">
+                  ₹{{ t.amount }}
+                </span>
+              </td>
+              <td class="small">{{ t.beneficiary }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+{% endblock %}

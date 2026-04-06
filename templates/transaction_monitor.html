@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h3 class="mb-2">💳 Transaction Monitoring</h3>
+<p class="text-muted">Real-time fraud & AML monitoring</p>
+
+<form method="get" action="{{ url_for('main.transaction_monitor') }}">
+  <div class="card shadow-sm rounded-4 mb-3">
+    <div class="card-body">
+      <div class="row g-3 align-items-center">
+        <div class="col-md-3">
+          <input
+            type="text"
+            name="search"
+            class="form-control"
+            placeholder="Search Txn Ref"
+            value="{{ request.args.get('search', '') }}"
+          >
+        </div>
+
+        <div class="col-md-3">
+          <select class="form-select" name="risk">
+            <option value="">All Risk</option>
+            <option value="Safe" {% if request.args.get('risk') == 'Safe' %}selected{% endif %}>Safe</option>
+            <option value="Suspicious" {% if request.args.get('risk') == 'Suspicious' %}selected{% endif %}>Suspicious</option>
+            <option value="High Risk" {% if request.args.get('risk') == 'High Risk' %}selected{% endif %}>High Risk</option>
+            <option value="Critical" {% if request.args.get('risk') == 'Critical' %}selected{% endif %}>Critical</option>
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <input
+            type="number"
+            name="min_amount"
+            class="form-control"
+            placeholder="Min Amount"
+            value="{{ request.args.get('min_amount', '') }}"
+          >
+        </div>
+
+        <div class="col-md-3">
+          <button type="submit" class="btn btn-primary w-100">Filter</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<div class="row g-2 mb-3">
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <div class="small text-muted">Total Txns</div>
+        <div class="h5">{{ txns|length }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <div class="small text-muted">High Risk</div>
+        <div class="h5 text-danger">{{ high_risk_count }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm rounded-4">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>Ref</th>
+            <th>Customer</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Risk</th>
+            <th>Category</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+
+        <tbody>
+        {% for t in txns %}
+          {% set p = preds.get(t.id) %}
+          <tr class="{% if p and p.risk_category == 'Critical' %}table-danger{% endif %}">
+            <td class="fw-bold">{{ t.txn_ref }}</td>
+
+            <td>
+              {% if t.customer_id %}
+                <a href="{{ url_for('main.customer_profile', customer_id=t.customer_id) }}">
+                  {{ t.customer_id }}
+                </a>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+
+            <td>{{ t.txn_type }}</td>
+
+            <td>
+              <span class="{% if t.amount > 100000 %}text-danger fw-bold{% endif %}">
+                ₹ {{ "%.2f"|format(t.amount) }}
+              </span>
+            </td>
+
+            <td>
+              {% if p %}
+                <span class="fw-bold
+                  {% if p.risk_score > 80 %}text-danger
+                  {% elif p.risk_score > 50 %}text-warning
+                  {% else %}text-success{% endif %}">
+                  {{ p.risk_score }}
+                </span>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+
+            <td>
+              {% if p %}
+                <span class="badge
+                  {% if p.risk_category == 'Critical' %}bg-danger
+                  {% elif p.risk_category in ['High Risk', 'High'] %}bg-warning
+                  {% else %}bg-success{% endif %}">
+                  {{ p.risk_category }}
+                </span>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+
+            <td>
+              <div class="d-flex gap-2 flex-wrap">
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.transaction_view', txn_id=t.id) }}">
+                  View
+                </a>
+
+                {% if p and p.risk_category in ['High', 'High Risk', 'Critical'] %}
+                  <form method="post" action="{{ url_for('main.create_alert_from_transaction', transaction_id=t.id) }}">
+                    <button type="submit" class="btn btn-sm btn-danger">🚨 Escalate</button>
+                  </form>
+                {% else %}
+                  <button type="button" class="btn btn-sm btn-outline-secondary" disabled>View</button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

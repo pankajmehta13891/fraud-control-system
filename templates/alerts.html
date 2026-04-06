@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h3 class="mb-2">🚨 Alerts Queue</h3>
+<p class="text-muted">Prioritized fraud alerts requiring action</p>
+
+<div class="mb-3">
+  <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.alerts_queue', status='Open') }}">Open</a>
+  <a class="btn btn-sm btn-outline-warning" href="{{ url_for('main.alerts_queue', status='Escalated') }}">Escalated</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.alerts_queue', status='Closed') }}">Closed</a>
+</div>
+
+<div class="card shadow-sm rounded-4">
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table align-middle">
+        <thead>
+          <tr>
+            <th>Priority</th>
+            <th>Customer</th>
+            <th>Risk Insight</th>
+            <th>Recommendation</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+
+        <tbody>
+        {% for a in alerts %}
+          {% set c = customers.get(a.customer_id) %}
+          {% set mp = msg_preds.get(a.message_id) %}
+          {% set tp = tx_preds.get(a.transaction_id) %}
+
+          <tr class="{% if a.severity == 'Critical' %}table-danger{% endif %}">
+            <td>
+              <span class="badge
+                {% if a.severity == 'Critical' %}bg-danger
+                {% elif a.severity == 'High' %}bg-warning
+                {% else %}bg-secondary{% endif %}">
+                {{ a.severity }}
+              </span>
+            </td>
+
+            <td>
+              {% if c %}
+                <a href="{{ url_for('main.customer_profile', customer_id=c.id) }}">
+                  {{ c.full_name }}
+                </a>
+                <div class="small text-muted">{{ c.account_masked }}</div>
+              {% else %}
+                -
+              {% endif %}
+            </td>
+
+            <td class="small">
+              {% if mp %}
+                📩 Msg: <b>{{ mp.risk_score }}</b> ({{ mp.risk_category }})<br>
+              {% endif %}
+              {% if tp %}
+                💳 Txn: <b>{{ tp.risk_score }}</b> ({{ tp.risk_category }})
+              {% endif %}
+            </td>
+
+            <td>
+              {% if a.severity == 'Critical' %}
+                <span class="text-danger fw-bold">Freeze Immediately</span>
+              {% elif a.severity == 'High' %}
+                <span class="text-warning fw-bold">Call Customer</span>
+              {% else %}
+                <span class="text-muted">Review</span>
+              {% endif %}
+            </td>
+
+            <td>
+              <div class="mb-1">
+                {% if a.severity == 'Critical' %}
+                  <form method="post" action="{{ url_for('main.freeze_account', alert_id=a.id) }}">
+                    <button type="submit" class="btn btn-sm btn-danger w-100">🧊 Freeze Account</button>
+                  </form>
+                {% elif a.severity == 'High' %}
+                  <form method="post" action="{{ url_for('main.call_customer', alert_id=a.id) }}">
+                    <button type="submit" class="btn btn-sm btn-primary w-100">📞 Call Customer</button>
+                  </form>
+                {% endif %}
+              </div>
+
+              <div class="d-flex flex-wrap gap-1">
+                <form method="post" action="{{ url_for('main.escalate', alert_id=a.id) }}">
+                  <button type="submit" class="btn btn-outline-dark btn-sm">Escalate</button>
+                </form>
+
+                <form method="post" action="{{ url_for('main.mark_safe', alert_id=a.id) }}">
+                  <button type="submit" class="btn btn-outline-success btn-sm">Safe</button>
+                </form>
+
+                <form method="post" action="{{ url_for('main.mark_fraud', alert_id=a.id) }}">
+                  <button type="submit" class="btn btn-outline-danger btn-sm">Fraud</button>
+                </form>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

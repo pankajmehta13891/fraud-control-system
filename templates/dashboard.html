@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2 class="mb-1">🚨 Fraud Control Room</h2>
+<p class="text-muted">Live fraud monitoring & decision dashboard</p>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card shadow-sm rounded-4 border-start border-primary border-4">
+            <div class="card-body">
+                <small class="text-muted text-uppercase fw-bold">Total Messages</small>
+                <h4 class="mt-1" id="kpi-total">{{ metrics.total_messages }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm rounded-4 border-start border-warning border-4">
+            <div class="card-body">
+                <small class="text-muted text-uppercase fw-bold">Suspicious</small>
+                <h4 class="mt-1" id="kpi-suspicious">{{ metrics.suspicious }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm rounded-4 border-start border-danger border-4">
+            <div class="card-body">
+                <small class="text-muted text-uppercase fw-bold">Critical Alerts</small>
+                <h4 class="mt-1" id="kpi-critical">{{ metrics.critical }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm rounded-4 border-start border-dark border-4">
+            <div class="card-body">
+                <small class="text-muted text-uppercase fw-bold">Customers Impacted</small>
+                <h4 class="mt-1" id="kpi-impacted">{{ metrics.affected_customers }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">🔥 Priority Alert Queue</h5>
+                    <span id="sync-indicator" class="badge bg-light text-dark fw-normal" style="transition: opacity 0.5s;">Synced</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Customer ID</th>
+                                <th>Risk Level</th>
+                                <th>Reason</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="priority-table-body">
+                            {% for a in recent_alerts %}
+                            {% if a.status.upper() == 'OPEN' %}
+                            <tr>
+                                <td><strong>{{ a.customer_id }}</strong></td>
+                                <td>
+                                    <span class="badge {% if a.severity == 'Critical' %}bg-danger{% else %}bg-warning{% endif %}">
+                                        {{ a.severity }}
+                                    </span>
+                                </td>
+                                <td>{{ a.alert_type }}</td>
+                                <td class="text-end">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="takeAction({{ a.id }}, 'CALL')">📞</button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="takeAction({{ a.id }}, 'FREEZE')">🧊</button>
+                                    <button class="btn btn-sm btn-outline-dark" onclick="takeAction({{ a.id }}, 'ESCALATE')">⬆</button>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <h5 class="mb-3">Risk Distribution</h5>
+                <div style="height: 250px;">
+                    <canvas id="riskChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-3">
+    <div class="col-lg-6">
+        <div class="card shadow-sm rounded-4">
+            <div class="card-body">
+                <h5 class="text-danger mb-3">🔴 Top Risky Users</h5>
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in risky %}
+                        <tr>
+                            <td>{{ r.customer_id }}</td>
+                            <td><span class="fw-bold">{{ r.risk_score }}</span></td>
+                            <td><span class="badge bg-danger">{{ r.risk_classification }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card shadow-sm rounded-4">
+            <div class="card-body">
+                <h5 class="text-success mb-3">🟢 Compliant Users</h5>
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in compliant %}
+                        <tr>
+                            <td>{{ c.customer_id }}</td>
+                            <td>{{ c.risk_score }}</td>
+                            <td><span class="badge bg-success">{{ c.risk_classification }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+/** * 1. ACTION HANDLER 
+ */
+function takeAction(alertId, actionType) {
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = "⌛"; // Visual feedback that the button was clicked
+    
+    fetch('/api/action', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            alert_id: alertId,
+            action: actionType
+        })
+    })
+    .then(response => {
+        if (response.ok) {
+            loadAlerts(); // Force a refresh of the table only
+        } else {
+            alert("Action failed. Check server logs.");
+            btn.innerHTML = originalText;
+        }
+    })
+    .catch(err => {
+        console.error("Error:", err);
+        btn.innerHTML = originalText;
+    });
+}
+
+/** * 2. LIVE DATA POLLING (SMART REFRESH)
+ */
+let lastDataHash = "";
+
+function loadAlerts() {
+    const indicator = document.getElementById('sync-indicator');
+    
+    fetch("/api/alerts")
+        .then(res => res.json())
+        .then(data => {
+            // Only update the DOM if the data content has actually changed
+            const currentHash = JSON.stringify(data);
+            if (currentHash === lastDataHash) return; 
+            
+            lastDataHash = currentHash;
+            
+            // Visual feedback of sync
+            indicator.style.opacity = "1";
+            setTimeout(() => { indicator.style.opacity = "0.3"; }, 1000);
+
+            let html = "";
+            data.forEach(a => {
+                // Ensure case-insensitive check for OPEN status
+                if (a.status && a.status.toUpperCase() === "OPEN") {
+                    const badge = a.severity === 'Critical' ? 'bg-danger' : 'bg-warning';
+                    html += `
+                        <tr style="animation: fadeIn 0.5s;">
+                            <td><strong>${a.customer_id}</strong></td>
+                            <td><span class="badge ${badge}">${a.severity}</span></td>
+                            <td>${a.alert_type}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary" onclick="takeAction(${a.id}, 'CALL')">📞</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="takeAction(${a.id}, 'FREEZE')">🧊</button>
+                                <button class="btn btn-sm btn-outline-dark" onclick="takeAction(${a.id}, 'ESCALATE')">⬆</button>
+                            </td>
+                        </tr>`;
+                }
+            });
+            document.getElementById("priority-table-body").innerHTML = html || '<tr><td colspan="4" class="text-center text-muted">No open alerts</td></tr>';
+        })
+        .catch(err => console.warn("Polling error:", err));
+}
+
+/** * 3. INITIALIZATION 
+ */
+document.addEventListener("DOMContentLoaded", function () {
+    // Initial Load
+    loadAlerts();
+    
+    // Refresh every 15 seconds (prevents high SQLite load/flicker)
+    setInterval(loadAlerts, 15000);
+
+    // Initialize Chart.js
+    const ctx = document.getElementById('riskChart').getContext('2d');
+    const chartData = {{ msg_trend | tojson }};
+    
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: chartData.map(x => x.label),
+            datasets: [{
+                data: chartData.map(x => x.value),
+                backgroundColor: ['#dc3545', '#ffc107', '#0d6efd', '#212529'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+});
+</script>
+
+<style>
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+</style>
+
+{% endblock %}

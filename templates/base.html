@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "Fraud Risk Portal" }}</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+
+<body class="bg-light">
+
+<!-- 🔵 TOP NAV -->
+<nav class="navbar navbar-dark bg-dark shadow-sm px-3">
+  <div class="d-flex align-items-center gap-3">
+    <span class="navbar-brand mb-0 h5">🏦 Fraud Risk Portal</span>
+
+    <!-- 🔥 QUICK STATS -->
+    <div class="d-none d-md-flex gap-3 text-white small">
+      <span>🚨 Alerts: <b>{{ stats.open_alerts or 0 }}</b></span>
+      <span>🔥 Critical: <b class="text-danger">{{ stats.critical_alerts or 0 }}</b></span>
+    </div>
+  </div>
+
+  <div class="d-flex align-items-center gap-3 text-white">
+    {% if current_user.is_authenticated %}
+      <span class="small">
+        {{ current_user.full_name }}
+        <span class="badge bg-secondary">{{ current_user.role }}</span>
+      </span>
+      <a class="btn btn-outline-light btn-sm" href="{{ url_for('auth.logout') }}">Logout</a>
+    {% endif %}
+  </div>
+</nav>
+
+<div class="container-fluid">
+  <div class="row">
+
+    <!-- 🟦 SIDEBAR -->
+    <aside class="col-lg-2 bg-white border-end min-vh-100 p-3">
+    <a href="{{ url_for('admin.list_tables') }}">Admin Tables</a>
+      <div class="nav flex-column gap-1">
+
+        {% macro nav_item(endpoint, icon, label) %}
+          <a class="nav-link d-flex align-items-center gap-2 
+            {% if request.endpoint == endpoint %}active fw-bold text-primary{% endif %}"
+            href="{{ url_for(endpoint) }}">
+            <i class="bi {{ icon }}"></i> {{ label }}
+          </a>
+        {% endmacro %}
+
+        {{ nav_item('main.dashboard', 'bi-speedometer2', 'Dashboard') }}
+        {{ nav_item('main.message_verify', 'bi-chat-left-text', 'Message Verification') }}
+        {{ nav_item('main.transaction_monitor', 'bi-arrow-left-right', 'Transactions') }}
+        {{ nav_item('main.alerts_queue', 'bi-bell', 'Alerts Queue') }}
+        {{ nav_item('main.top_risky', 'bi-exclamation-triangle', 'Top Risky Users') }}
+        {{ nav_item('main.top_compliant', 'bi-shield-check', 'Top Compliant Users') }}
+        {{ nav_item('main.audit_logs', 'bi-journal-text', 'Audit Logs') }}
+        {{ nav_item('main.reports_page', 'bi-file-earmark-text', 'Reports') }}
+
+        {% if current_user.role == "Admin" %}
+          <hr>
+          {{ nav_item('main.admin_settings', 'bi-gear', 'Admin Settings') }}
+        {% endif %}
+
+      </div>
+    </aside>
+
+    <!-- 🟩 MAIN CONTENT -->
+    <main class="col-lg-10 p-4">
+
+      <!-- FLASH -->
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, msg in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show shadow-sm">
+              {{ msg }}
+              <button class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <!-- PAGE CONTENT -->
+      {% block content %}{% endblock %}
+
+    </main>
+
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

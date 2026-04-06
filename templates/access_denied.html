@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card text-center shadow-sm p-4">
+  <h3 class="text-danger">🔒 Access Restricted</h3>
+  <p class="mt-2">You do not have permission to view Audit Logs.</p>
+
+  <hr>
+
+  <h5>What you can do instead:</h5>
+
+  <div class="d-flex justify-content-center gap-3 mt-3">
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary">
+      📊 Go to Dashboard
+    </a>
+
+    <a href="{{ url_for('main.transaction_monitor') }}" class="btn btn-success">
+      💳 View Transactions
+    </a>
+
+    <a href="{{ url_for('main.alerts_queue') }}" class="btn btn-warning">
+      🚨 View Alerts
+    </a>
+  </div>
+</div>
+
+{% endblock %}

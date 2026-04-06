@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h3 class="mb-2">📊 Reports & Exports</h3>
+<p class="text-muted">Generate compliance and fraud analysis reports</p>
+
+<form method="POST" action="{{ url_for('main.export_reports') }}">
+
+  <div class="card shadow-sm rounded-4 mb-3">
+    <div class="card-body">
+      <h5>📁 Report Type</h5>
+
+      <div class="row">
+        <div class="col-md-3">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="report_type" value="messages" checked>
+            <label class="form-check-label">Suspicious Messages</label>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="report_type" value="customers">
+            <label class="form-check-label">Risky Customers</label>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="report_type" value="alerts">
+            <label class="form-check-label">Alerts Summary</label>
+          </div>
+        </div>
+
+        <div class="col-md-3">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="report_type" value="audit">
+            <label class="form-check-label">Audit Logs</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm rounded-4 mb-3">
+    <div class="card-body">
+      <h5>📅 Filters</h5>
+
+      <div class="row">
+        <div class="col-md-4">
+          <label class="form-label">From Date</label>
+          <input type="date" name="from_date" class="form-control">
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">To Date</label>
+          <input type="date" name="to_date" class="form-control">
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Risk Level</label>
+          <select name="risk_level" class="form-select">
+            <option value="">All</option>
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+            <option value="Critical">Critical</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm rounded-4 mb-3">
+    <div class="card-body">
+      <h5>📄 Export Format</h5>
+
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="radio" name="export_format" value="csv" checked>
+        <label class="form-check-label">CSV</label>
+      </div>
+
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="radio" name="export_format" value="excel">
+        <label class="form-check-label">Excel</label>
+      </div>
+
+      <div class="form-check form-check-inline">
+        <input class="form-check-input" type="radio" name="export_format" value="pdf">
+        <label class="form-check-label">PDF</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-end">
+    <button type="submit" class="btn btn-primary px-4">
+      ⬇ Generate Report
+    </button>
+  </div>
+
+</form>
+
+{% endblock %}
