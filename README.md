@@ -1,3 +1,4 @@
+
 # 🛡️ FraudShield — Banking Fraud Control System
 
 > An enterprise-grade, AI-powered fraud control system for banks — combining real-time scam message detection, customer risk intelligence, transaction anomaly monitoring, AML pattern analysis, and end-to-end compliance audit trails.
@@ -549,3 +550,7 @@ For queries, demo requests, or integration support:
 ---
 
 <p align="center">Built for banking security teams · Powered by Python, Flask & scikit-learn</p>
+=======
+# fraud-control-system
+AI-powered banking fraud control system — real-time scam message detection, transaction anomaly monitoring, customer risk profiling, and compliance audit trails.
+>>>>>>> d792dfc9d092fa279bd81ed227e3de6fcd3e81bc
