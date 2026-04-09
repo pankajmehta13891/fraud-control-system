@@ -155,5 +155,10 @@
     </div>
   </div>
 </div>
+{% import "_macros.html" as macros %}
 
+{{ macros.render_pagination(pagination, 'main.transaction_monitor', 
+    search=search, 
+    risk=risk, 
+    min_amount=min_amount) }}
 {% endblock %}

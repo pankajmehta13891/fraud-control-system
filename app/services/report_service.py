@@ -83,9 +83,20 @@ def _build_rows(report_type, from_date=None, to_date=None, risk_level=None):
         query = AuditLog.query
         query = _apply_created_at_filter(query, AuditLog, from_date, to_date)
         rows = query.order_by(AuditLog.created_at.desc()).all()
-        headers = ["user_id", "entity_type", "entity_id", "action", "reason_code", "created_at"]
+        
+        # 1. Update Headers to match your UI screenshot
+        headers = ["Time", "User", "Entity", "Action", "Reason", "Details"]
+        
+        # 2. Map the data including the missing 'details' field
         data = [
-            [r.user_id, r.entity_type, r.entity_id, r.action, r.reason_code, r.created_at]
+            [
+                r.created_at.strftime("%d-%b %H:%M"), # Formatted Time
+                r.user_id,                            # User ID (or join with User.username)
+                f"{r.entity_type} #{r.entity_id}",    # Combined Entity info
+                r.action,
+                r.reason_code,                        # Mapping to 'Reason'
+                r.details                             # 👈 THE MISSING DETAILS COLUMN
+            ]
             for r in rows
         ]
         return headers, _stringify_rows(data)

@@ -1,12 +1,10 @@
 {% extends "base.html" %}
-{% block content %}
+{% import "_macros.html" as macros %} {% block content %}
 
 <h3 class="mb-2">📜 Audit Logs</h3>
 <p class="text-muted">Track all user actions, fraud decisions, and system activity</p>
 
-<!-- 🔍 FILTERS -->
 <form method="get" class="row g-2 mb-3">
-
   <div class="col-md-2">
     <input type="text" name="user" class="form-control" placeholder="User ID" value="{{ request.args.get('user','') }}">
   </div>
@@ -14,19 +12,19 @@
   <div class="col-md-2">
     <select name="action" class="form-select">
       <option value="">All Actions</option>
-      <option value="FREEZE">Freeze</option>
-      <option value="ESCALATE">Escalate</option>
-      <option value="SAFE">Marked Safe</option>
-      <option value="FRAUD">Marked Fraud</option>
+      <option value="FREEZE" {{ 'selected' if request.args.get('action') == 'FREEZE' }}>Freeze</option>
+      <option value="ESCALATE" {{ 'selected' if request.args.get('action') == 'ESCALATE' }}>Escalate</option>
+      <option value="SAFE" {{ 'selected' if request.args.get('action') == 'SAFE' }}>Marked Safe</option>
+      <option value="FRAUD" {{ 'selected' if request.args.get('action') == 'FRAUD' }}>Marked Fraud</option>
     </select>
   </div>
 
   <div class="col-md-2">
-    <input type="date" name="from_date" class="form-control">
+    <input type="date" name="from_date" class="form-control" value="{{ request.args.get('from_date','') }}">
   </div>
 
   <div class="col-md-2">
-    <input type="date" name="to_date" class="form-control">
+    <input type="date" name="to_date" class="form-control" value="{{ request.args.get('to_date','') }}">
   </div>
 
   <div class="col-md-2">
@@ -36,16 +34,12 @@
   <div class="col-md-2">
     <a href="{{ url_for('main.export_logs') }}" class="btn btn-outline-dark w-100">⬇ Export</a>
   </div>
-
 </form>
 
-<!-- 📊 TABLE -->
 <div class="card shadow-sm rounded-4">
   <div class="card-body">
-
     <div class="table-responsive">
       <table class="table align-middle">
-
         <thead>
           <tr>
             <th>Time</th>
@@ -58,57 +52,50 @@
         </thead>
 
         <tbody>
-        {% for l in logs %}
-
+        {% for log, user in pagination.items %}
           <tr>
-
-            <!-- TIME -->
             <td class="small text-muted">
-              {{ l.created_at.strftime('%d-%b %H:%M') if l.created_at else '-' }}
+              {{ log.created_at.strftime('%d-%b %H:%M') if log.created_at else '-' }}
             </td>
 
-            <!-- USER -->
             <td>
               <span class="badge bg-secondary">
-                {{ l.user_name or l.user_id }}
-              </span>
+                {{ user.username }} </span>
             </td>
 
-            <!-- ENTITY -->
             <td>
-              <span class="small">
-                {{ l.entity_type }}
-              </span><br>
-              <span class="text-muted small">#{{ l.entity_id }}</span>
+              <span class="small">{{ log.entity_type }}</span><br>
+              <span class="text-muted small">#{{ log.entity_id }}</span>
             </td>
 
-            <!-- ACTION -->
             <td>
-              <span class="badge
-                {% if l.action == 'FREEZE' %}bg-danger
-                {% elif l.action == 'FRAUD' %}bg-dark
-                {% elif l.action == 'ESCALATE' %}bg-warning
+              <span class="badge 
+                {% if log.action in ['FREEZE', 'account_frozen'] %}bg-danger
+                {% elif log.action in ['FRAUD', 'fraud_confirmed'] %}bg-dark
+                {% elif log.action in ['ESCALATE', 'escalated'] %}bg-warning
                 {% else %}bg-success{% endif %}">
-                {{ l.action }}
+                {{ log.action.replace('_', ' ').upper() }}
               </span>
             </td>
 
-            <!-- REASON -->
-            <td class="small">
-              {{ l.reason_code or '-' }}
-            </td>
+            <td class="small">{{ log.reason_code or '-' }}</td>
 
-            <!-- DETAILS -->
-            <td class="small text-muted">
-              {{ l.details }}
+            <td class="small text-muted" style="max-width: 300px;">
+              {{ log.details }}
             </td>
-
           </tr>
-
         {% endfor %}
         </tbody>
-
       </table>
+    </div>
+
+    <div class="mt-3">
+        {{ macros.render_pagination(pagination, 'main.audit_logs', 
+            user=request.args.get('user',''), 
+            action=request.args.get('action',''), 
+            from_date=request.args.get('from_date',''), 
+            to_date=request.args.get('to_date','')) 
+        }}
     </div>
 
   </div>

@@ -39,49 +39,57 @@
     </div>
 </div>
 
+{% import "_macros.html" as macros %}
 <div class="row g-3">
     <div class="col-lg-8">
-        <div class="card shadow-sm rounded-4 h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0">🔥 Priority Alert Queue</h5>
-                    <span id="sync-indicator" class="badge bg-light text-dark fw-normal" style="transition: opacity 0.5s;">Synced</span>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Customer ID</th>
-                                <th>Risk Level</th>
-                                <th>Reason</th>
-                                <th class="text-end">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="priority-table-body">
-                            {% for a in recent_alerts %}
-                            {% if a.status.upper() == 'OPEN' %}
-                            <tr>
-                                <td><strong>{{ a.customer_id }}</strong></td>
-                                <td>
-                                    <span class="badge {% if a.severity == 'Critical' %}bg-danger{% else %}bg-warning{% endif %}">
-                                        {{ a.severity }}
-                                    </span>
-                                </td>
-                                <td>{{ a.alert_type }}</td>
-                                <td class="text-end">
-                                    <button class="btn btn-sm btn-outline-primary" onclick="takeAction({{ a.id }}, 'CALL')">📞</button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="takeAction({{ a.id }}, 'FREEZE')">🧊</button>
-                                    <button class="btn btn-sm btn-outline-dark" onclick="takeAction({{ a.id }}, 'ESCALATE')">⬆</button>
-                                </td>
-                            </tr>
-                            {% endif %}
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+    <div class="card shadow-sm rounded-4 h-100">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">🔥 Priority Alert Queue</h5>
+                <span id="sync-indicator" class="badge bg-light text-dark fw-normal" style="opacity: 0.3; transition: opacity 0.5s;">Synced</span>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Customer ID</th>
+                            <th>Risk Level</th>
+                            <th>Reason</th>
+                            <th class="text-end">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="priority-table-body">
+                        {% for a in recent_alerts %}
+                        <tr>
+                            <td><strong>{{ a.customer_id }}</strong></td>
+                            <td>
+                                <span class="badge {% if a.severity == 'Critical' %}bg-danger{% else %}bg-warning{% endif %}">
+                                    {{ a.severity }}
+                                </span>
+                            </td>
+                            <td>{{ a.alert_type }}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary" onclick="takeAction(this, {{ a.id }}, 'CALL')">📞</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="takeAction(this, {{ a.id }}, 'FREEZE')">🧊</button>
+                                <button class="btn btn-sm btn-outline-dark" onclick="takeAction(this, {{ a.id }}, 'ESCALATE')">⬆</button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-4">No active alerts. System secure.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-3">
+                {{ macros.render_pagination(pagination, 'main.dashboard') }}
             </div>
         </div>
     </div>
+</div>
 
     <div class="col-lg-4">
         <div class="card shadow-sm rounded-4 h-100">
@@ -154,12 +162,12 @@
 <script>
 /** * 1. ACTION HANDLER 
  */
-function takeAction(alertId, actionType) {
-    const btn = event.target;
+function takeAction(btn, alertId, actionType) {
     const originalText = btn.innerHTML;
-    btn.innerHTML = "⌛"; // Visual feedback that the button was clicked
-    
-    fetch('/api/action', { 
+    btn.innerHTML = "⌛";
+    btn.disabled = true;
+
+    fetch('/api/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -169,15 +177,17 @@ function takeAction(alertId, actionType) {
     })
     .then(response => {
         if (response.ok) {
-            loadAlerts(); // Force a refresh of the table only
+            loadAlerts();
         } else {
             alert("Action failed. Check server logs.");
             btn.innerHTML = originalText;
+            btn.disabled = false;
         }
     })
     .catch(err => {
         console.error("Error:", err);
         btn.innerHTML = originalText;
+        btn.disabled = false;
     });
 }
 
@@ -186,44 +196,35 @@ function takeAction(alertId, actionType) {
 let lastDataHash = "";
 
 function loadAlerts() {
-    const indicator = document.getElementById('sync-indicator');
-    
-    fetch("/api/alerts")
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentPage = urlParams.get('page') || '1';
+
+    fetch(`/api/alerts?page=${currentPage}`)   // 👈 pass page
         .then(res => res.json())
         .then(data => {
-            // Only update the DOM if the data content has actually changed
-            const currentHash = JSON.stringify(data);
-            if (currentHash === lastDataHash) return; 
-            
-            lastDataHash = currentHash;
-            
-            // Visual feedback of sync
-            indicator.style.opacity = "1";
-            setTimeout(() => { indicator.style.opacity = "0.3"; }, 1000);
-
             let html = "";
+
             data.forEach(a => {
-                // Ensure case-insensitive check for OPEN status
                 if (a.status && a.status.toUpperCase() === "OPEN") {
                     const badge = a.severity === 'Critical' ? 'bg-danger' : 'bg-warning';
                     html += `
-                        <tr style="animation: fadeIn 0.5s;">
+                        <tr>
                             <td><strong>${a.customer_id}</strong></td>
                             <td><span class="badge ${badge}">${a.severity}</span></td>
                             <td>${a.alert_type}</td>
                             <td class="text-end">
-                                <button class="btn btn-sm btn-outline-primary" onclick="takeAction(${a.id}, 'CALL')">📞</button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="takeAction(${a.id}, 'FREEZE')">🧊</button>
-                                <button class="btn btn-sm btn-outline-dark" onclick="takeAction(${a.id}, 'ESCALATE')">⬆</button>
+                                <button class="btn btn-sm btn-outline-primary" onclick="takeAction(this, ${a.id}, 'CALL')">📞</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="takeAction(this, ${a.id}, 'FREEZE')">🧊</button>
+                                <button class="btn btn-sm btn-outline-dark" onclick="takeAction(this, ${a.id}, 'ESCALATE')">⬆</button>
                             </td>
                         </tr>`;
                 }
             });
-            document.getElementById("priority-table-body").innerHTML = html || '<tr><td colspan="4" class="text-center text-muted">No open alerts</td></tr>';
-        })
-        .catch(err => console.warn("Polling error:", err));
-}
 
+            document.getElementById("priority-table-body").innerHTML =
+                html || '<tr><td colspan="4" class="text-center text-muted">No open alerts</td></tr>';
+        });
+}
 /** * 3. INITIALIZATION 
  */
 document.addEventListener("DOMContentLoaded", function () {

@@ -2,7 +2,7 @@ import json
 import csv
 import io
 import os
-
+from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, Response, send_file
 from flask_login import login_required, current_user
 
@@ -52,23 +52,51 @@ def require_roles(*roles):
     return decorator
 
 
+from flask import render_template, request
+from ..models import Alert, CustomerRiskScore, MessagePrediction
+# ... other imports
+
 @main_bp.route("/")
 @login_required
 def dashboard():
+    # 1. Get the current page for the Priority Queue
+    page = request.args.get('page', 1, type=int)
+    
     metrics = dashboard_metrics()
-    recent_alerts = Alert.query.order_by(Alert.created_at.desc()).limit(8).all()
+    
+    #The Logic Fix ---
+    # Create a threshold to only show alerts from the last 24 hours.
+    # This ignores thousands of old "simulated" alerts and shrinks your page count.
+
+    time_threshold = datetime.utcnow() - timedelta(hours=24)
+
+    # 2. 🔥 Replace .limit(8).all() with .paginate()
+    # We filter for 'OPEN' status so the queue only shows active threats
+    pagination = Alert.query.filter(
+        Alert.status.ilike('OPEN'),
+        Alert.created_at >= time_threshold  # 🔥 This reduces the total pages
+    ).order_by(Alert.created_at.desc())\
+     .paginate(page=page, per_page=10, error_out=False) # 🔥 Standardized to 10
+    
+    recent_alerts = pagination.items
+    
+    # Summaries (these don't need pagination as they are top-5 snapshots)
     risky = CustomerRiskScore.query.order_by(CustomerRiskScore.risk_score.desc()).limit(5).all()
     compliant = CustomerRiskScore.query.order_by(CustomerRiskScore.risk_score.asc()).limit(5).all()
+    
+    # 📈 Dynamic Trend Metrics
     msg_trend = [
         {"label": "Safe", "value": MessagePrediction.query.filter(MessagePrediction.risk_score < 25).count()},
         {"label": "Suspicious", "value": MessagePrediction.query.filter(MessagePrediction.risk_score.between(25, 49)).count()},
         {"label": "High Risk", "value": MessagePrediction.query.filter(MessagePrediction.risk_score.between(50, 74)).count()},
         {"label": "Critical", "value": MessagePrediction.query.filter(MessagePrediction.risk_score >= 75).count()},
     ]
+    
     return render_template(
         "dashboard.html",
         metrics=metrics,
-        recent_alerts=recent_alerts,
+        recent_alerts=recent_alerts, # Current page items
+        pagination=pagination,       # 👈 Needed for the UI macro
         risky=risky,
         compliant=compliant,
         msg_trend=msg_trend,
@@ -80,21 +108,19 @@ def dashboard():
 @login_required
 def message_verify():
     result = None
+    page = request.args.get('page', 1, type=int)
 
+    # --- Step 1: Handle Manual Entry (POST) ---
     if request.method == "POST":
         customer_id = request.form.get("customer_id") or None
-        sender_name = request.form.get("sender_name")
-        sender_id = request.form.get("sender_id")
-        phone_or_email = request.form.get("phone_or_email")
         body = request.form.get("body") or ""
-        channel = request.form.get("channel", "SMS")
-
+        
         msg = Message(
             customer_id=customer_id,
-            sender_name=sender_name,
-            sender_id=sender_id,
-            phone_or_email=phone_or_email,
-            channel=channel,
+            sender_name=request.form.get("sender_name"),
+            sender_id=request.form.get("sender_id"),
+            phone_or_email=request.form.get("phone_or_email"),
+            channel=request.form.get("channel", "SMS"),
             body=body,
             url_count=body.count("http") + body.count("www."),
             short_link_count=body.lower().count("bit.ly")
@@ -105,63 +131,87 @@ def message_verify():
         result = analyze_message(msg.id)
         flash("Message analysed successfully.", "success")
 
+    # --- Step 2: Generic Pagination with Join ---
+    # We join Message and MessagePrediction so we only pull 10 pairs at a time
+    pagination = db.session.query(Message, MessagePrediction)\
+        .outerjoin(MessagePrediction, Message.id == MessagePrediction.message_id)\
+        .order_by(Message.created_at.desc())\
+        .paginate(page=page, per_page=10, error_out=False)
+
+    # Convert pagination items into a dictionary for your template's current structure
+    # This prevents the "preds.get(m.id)" logic from breaking
+    current_messages = [item[0] for item in pagination.items]
+    current_preds = {item[0].id: item[1] for item in pagination.items if item[1]}
+
     customers = Customer.query.order_by(Customer.full_name.asc()).all()
-    messages = Message.query.order_by(Message.created_at.desc()).limit(25).all()
-    preds = {p.message_id: p for p in MessagePrediction.query.order_by(MessagePrediction.id.desc()).all()}
 
     return render_template(
         "message_verify.html",
         customers=customers,
-        messages=messages,
-        preds=preds,
-        result=result,
-        current_user=current_user
+        messages=current_messages, # Only 10 messages
+        preds=current_preds,       # Only 10 predictions
+        pagination=pagination,     # Pass the pagination object
+        result=result
     )
 
+
+from flask import render_template, request
+from sqlalchemy import or_
 
 @main_bp.route("/transactions")
 @login_required
 def transaction_monitor():
+    # --- Step 1: Get Params ---
+    page = request.args.get('page', 1, type=int)
     search = request.args.get("search", "").strip()
-    risk = request.args.get("risk", "").strip()
+    risk_filter = request.args.get("risk", "").strip()
     min_amount = request.args.get("min_amount", "").strip()
 
-    query = Transaction.query
-    preds = {p.transaction_id: p for p in TransactionPrediction.query.all()}
+    # --- Step 2: Build Joined Query ---
+    # We join Transaction with its Prediction so we can filter by Risk Category in SQL
+    query = db.session.query(Transaction, TransactionPrediction).outerjoin(
+        TransactionPrediction, Transaction.id == TransactionPrediction.transaction_id
+    )
 
-    # Step 1: Apply DB filters
+    # Apply Search Filter
     if search:
         query = query.filter(Transaction.txn_ref.ilike(f"%{search}%"))
 
+    # Apply Amount Filter
     if min_amount:
         try:
             query = query.filter(Transaction.amount >= float(min_amount))
         except ValueError:
             pass
 
-    txns = query.order_by(Transaction.created_at.desc()).all()
+    # Apply Risk Filter (Now happening in the Database!)
+    if risk_filter and risk_filter != "All Risk":
+        query = query.filter(TransactionPrediction.risk_category == risk_filter)
 
-    # Step 2: Apply risk filter (in-memory because it's in prediction table)
-    if risk:
-        filtered_txns = []
-        for t in txns:
-            p = preds.get(t.id)
-            if p and p.risk_category == risk:
-                filtered_txns.append(t)
-        txns = filtered_txns
+    # --- Step 3: Execute Pagination ---
+    pagination = query.order_by(Transaction.created_at.desc()).paginate(
+        page=page, per_page=10, error_out=False
+    )
 
-    # Step 3: Count high risk
-    high_risk_count = 0
-    for t in txns:
-        p = preds.get(t.id)
-        if p and p.risk_category in ["High", "High Risk", "Critical"]:
-            high_risk_count += 1
+    # Convert results into a dictionary for your existing template logic
+    # pagination.items is a list of tuples: [(Transaction, TransactionPrediction), ...]
+    current_txns = [item[0] for item in pagination.items]
+    current_preds = {item[0].id: item[1] for item in pagination.items if item[1]}
+
+    # --- Step 4: Quick Stats (Efficient) ---
+    high_risk_count = TransactionPrediction.query.filter(
+        TransactionPrediction.risk_category.in_(["High", "Critical"])
+    ).count()
 
     return render_template(
         "transaction_monitor.html",
-        txns=txns,
-        preds=preds,
-        high_risk_count=high_risk_count
+        txns=current_txns,
+        preds=current_preds,
+        pagination=pagination,
+        high_risk_count=high_risk_count,
+        search=search,
+        risk=risk_filter,
+        min_amount=min_amount
     )
 
 
@@ -211,22 +261,37 @@ def customer_profile(customer_id):
     )
 
 
+
 @main_bp.route("/alerts")
 @login_required
 def alerts_queue():
-    status = request.args.get("status", "Open")
-    alerts = Alert.query.filter_by(status=status).order_by(Alert.created_at.desc()).all()
-    customers = {c.id: c for c in Customer.query.all()}
-    msg_preds = {p.message_id: p for p in MessagePrediction.query.all()}
-    tx_preds = {p.transaction_id: p for p in TransactionPrediction.query.all()}
-    return render_template(
-        "alerts.html",
-        alerts=alerts,
-        customers=customers,
-        msg_preds=msg_preds,
-        tx_preds=tx_preds,
-        status=status
-    )
+    status = request.args.get('status', 'Open')
+    page = request.args.get('page', 1, type=int)
+    
+    # 1. Fetch Paginated Alerts
+    pagination = Alert.query.filter_by(status=status)\
+                            .order_by(Alert.created_at.desc())\
+                            .paginate(page=page, per_page=10, error_out=False)
+    
+    alerts = pagination.items
+
+    # 2. Build Dictionaries for the current 10 items (Optimizes lookup)
+    # This prevents the template from querying the DB inside the loop
+    customers = {c.id: c for c in Customer.query.filter(Customer.id.in_([a.customer_id for a in alerts])).all()}
+    
+    msg_ids = [a.message_id for a in alerts if a.message_id]
+    msg_preds = {mp.message_id: mp for mp in MessagePrediction.query.filter(MessagePrediction.message_id.in_(msg_ids)).all()}
+    
+    tx_ids = [a.transaction_id for a in alerts if a.transaction_id]
+    tx_preds = {tp.transaction_id: tp for tp in TransactionPrediction.query.filter(TransactionPrediction.transaction_id.in_(tx_ids)).all()}
+
+    return render_template("alerts.html", 
+                           alerts=alerts, 
+                           pagination=pagination, 
+                           customers=customers,
+                           msg_preds=msg_preds,
+                           tx_preds=tx_preds,
+                           current_status=status)
 
 
 @main_bp.route("/top-risky")
@@ -243,43 +308,65 @@ def top_compliant():
     return render_template("top_users.html", items=items, title="Top Compliant Users", mode="compliant")
 
 
+from flask import render_template, request, flash
+from ..models import AuditLog, User, ROLE_COMPLIANCE, ROLE_ADMIN
+from ..extensions import db
+
 @main_bp.route("/audit/logs")
 @login_required
 def audit_logs():
+    # 🔒 Access Control
     if current_user.role not in [ROLE_COMPLIANCE, ROLE_ADMIN]:
         flash("Audit log access is restricted.", "warning")
         return render_template("access_denied.html")
-        
-    query = AuditLog.query
+    
+    # 📝 Get Pagination and Filter Params
+    page = request.args.get('page', 1, type=int)
+    user_id = request.args.get("user")
+    action_param = request.args.get("action")
+    from_date = request.args.get("from_date")
+    to_date = request.args.get("to_date")
 
-    # 🔍 FILTER: USER
-    user = request.args.get("user")
-    if user:
-        query = query.filter(AuditLog.user_id == user)
+    # 🔗 Step 1: Join AuditLog with User (Fetches username + log data together)
+    query = db.session.query(AuditLog, User).join(User, AuditLog.user_id == User.id)
 
-    # 🔍 FILTER: ACTION (map UI → actual DB values)
-    action = request.args.get("action")
-    if action:
+    # 🔍 Step 2: Apply Database Filters
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
+
+    if action_param:
         action_map = {
             "FREEZE": "account_frozen",
             "ESCALATE": "escalated",
             "SAFE": "marked_safe",
             "FRAUD": "fraud_confirmed"
         }
-        query = query.filter(AuditLog.action == action_map.get(action, action))
-
-    # 🔍 FILTER: DATE
-    from_date = request.args.get("from_date")
-    to_date = request.args.get("to_date")
+        # Get mapped value or use the raw param
+        db_action = action_map.get(action_param, action_param)
+        query = query.filter(AuditLog.action == db_action)
 
     if from_date:
         query = query.filter(AuditLog.created_at >= from_date)
     if to_date:
         query = query.filter(AuditLog.created_at <= to_date)
 
-    logs = query.order_by(AuditLog.created_at.desc()).all()
+    # 📏 Step 3: Generic Pagination (15 logs per page)
+    pagination = query.order_by(AuditLog.created_at.desc()).paginate(
+        page=page, per_page=15, error_out=False
+    )
 
-    return render_template("audit_logs.html", logs=logs)
+    # Fetch all users for the filter dropdown
+    all_users = User.query.order_by(User.username.asc()).all()
+
+    return render_template(
+        "audit_logs.html", 
+        pagination=pagination,
+        users=all_users,
+        current_user_filter=user_id,
+        current_action=action_param,
+        from_date=from_date,
+        to_date=to_date
+    )
 
 
 @main_bp.route("/admin/settings", methods=["GET", "POST"])
@@ -484,18 +571,31 @@ def customer_json(customer_id):
 @main_bp.route("/api/alerts")
 @login_required
 def alerts_json():
-    alerts = Alert.query.order_by(Alert.created_at.desc()).all()
-    return jsonify([{
-        "id": a.id,
-        "alert_type": a.alert_type,
-        "severity": a.severity,
-        "status": a.status,
-        "customer_id": a.customer_id,
-        "message_id": a.message_id,
-        "transaction_id": a.transaction_id,
-        "created_at": a.created_at.isoformat(),
-    } for a in alerts])
+    time_threshold = datetime.utcnow() - timedelta(hours=24)
 
+    alerts = (
+        Alert.query.filter(
+            Alert.status.ilike("OPEN"),
+            Alert.created_at >= time_threshold
+        )
+        .order_by(Alert.created_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    return jsonify([
+        {
+            "id": a.id,
+            "alert_type": a.alert_type,
+            "severity": a.severity,
+            "status": a.status,
+            "customer_id": a.customer_id,
+            "message_id": a.message_id,
+            "transaction_id": a.transaction_id,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        }
+        for a in alerts
+    ])
 
 @main_bp.route("/create_alert_from_message", methods=["POST"])
 @login_required

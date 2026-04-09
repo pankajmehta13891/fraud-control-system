@@ -124,16 +124,34 @@ def api_action():
 @api_bp.route("/api/alerts")
 @login_required
 def api_alerts():
-    alerts = Alert.query.order_by(Alert.created_at.desc()).all()
+    """
+    Returns the 10 most recent OPEN alerts from the last 24 hours.
+    This limits the data sent to the dashboard polling script to prevent 
+    the 'growing queue' issue on the first page.
+    """
+    # 1. Standardize the time window (Sync this with main.py)
+    # This prevents 'stale' simulated alerts from inflating your count.
+    time_threshold = datetime.utcnow() - timedelta(hours=24)
+
+    # 2. Query with strict filters and a limit
+    # We use .limit(10) to match the 'per_page' setting on the dashboard.
+    alerts = Alert.query.filter(
+        Alert.status.ilike('OPEN'),
+        Alert.created_at >= time_threshold
+    ).order_by(Alert.created_at.desc())\
+     .limit(10).all()
+
+    # 3. Serialize to JSON
+    # Ensure all keys match what your JavaScript loadAlerts() expects.
     return jsonify([{
         "id": a.id,
-        "alert_type": a.alert_type,
-        "severity": a.severity,
-        "status": a.status,
         "customer_id": a.customer_id,
+        "severity": a.severity,
+        "alert_type": a.alert_type,
+        "status": a.status,
         "message_id": a.message_id,
         "transaction_id": a.transaction_id,
-        "created_at": a.created_at.isoformat(),
+        "created_at": a.created_at.isoformat() if a.created_at else None
     } for a in alerts])
 
 @api_bp.route("/api/reports/generate", methods=["POST"])
