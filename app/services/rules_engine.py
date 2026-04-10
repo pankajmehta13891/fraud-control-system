@@ -1,7 +1,21 @@
 import math
 import re
 from datetime import datetime, timedelta
-from ..utils.text_utils import extract_urls, find_keywords, URL_RE, SHORT_LINK_RE, OTP_RE, URGENCY_RE, IMPERSONATION_RE, REFUND_RE, CALLBACK_RE, ATTACHMENT_RE, BANK_DOMAIN_RE
+from ..utils.text_utils import (
+    extract_urls,
+    find_keywords,
+    suspicious_url_indicators,
+    URL_RE,
+    SHORT_LINK_RE,
+    OTP_RE,
+    URGENCY_RE,
+    IMPERSONATION_RE,
+    REFUND_RE,
+    CALLBACK_RE,
+    ATTACHMENT_RE,
+    BANK_DOMAIN_RE,
+    FINANCIAL_PROMO_RE,
+)
 
 SHORTENER_DOMAINS = ["bit.ly", "tinyurl", "t.co", "goo.gl", "rb.gy", "cutt.ly", "is.gd"]
 SUSPICIOUS_TLDS = [".ru", ".xyz", ".top", ".biz", ".click", ".tk"]
@@ -26,32 +40,37 @@ def link_risk(body: str) -> tuple[int, list[str], list[str]]:
     reasons = []
     urls = extract_urls(body or "")
     kw = []
+
     if urls:
         score += 10
         reasons.append("Message contains URL(s)")
+
     for url in urls:
         low = url.lower()
+
         if any(s in low for s in SHORTENER_DOMAINS):
             score += 30
             reasons.append("Shortened URL detected")
             kw.append(url)
-        if any(tld in low for tld in SUSPICIOUS_TLDS):
-            score += 10
-            reasons.append("Suspicious TLD detected")
-        if any(bank in low for bank in ["sbi", "hdfc", "icici", "axis", "bank", "upi", "rbi"]):
-            score += 25
-            reasons.append("Bank/regulated entity impersonation in link")
-            kw.append(url)
-    if re.search(r'www\.(?![a-z0-9-]+\.(com|in|co|org)\b)', body or "", re.I):
+
+        url_score, url_reasons, url_keywords = suspicious_url_indicators(url)
+        score += url_score
+        reasons.extend(url_reasons)
+        kw.extend(url_keywords)
+
+    if re.search(r'www\.(?![a-z0-9-]+\.(com|in|co|org|net)\b)', body or "", re.I):
         score += 5
         reasons.append("Potentially malformed URL domain")
-    return min(score, 100), reasons, kw
+
+    return min(score, 100), list(dict.fromkeys(reasons)), list(dict.fromkeys([k for k in kw if k]))
 
 def message_rules(sender_name: str, sender_id: str, body: str, phone_or_email: str = "") -> dict:
     txt = body or ""
     score = 0
     reasons = []
     kws = []
+
+    urls = extract_urls(txt)
 
     checks = [
         (OTP_RE, 20, "OTP/PIN/CVV request detected", ["otp", "pin", "cvv", "passcode"]),
@@ -61,33 +80,58 @@ def message_rules(sender_name: str, sender_id: str, body: str, phone_or_email: s
         (CALLBACK_RE, 8, "Call-back instruction detected", ["call", "contact", "helpline", "customer care number"]),
         (ATTACHMENT_RE, 8, "Attachment mention detected", ["attachment", "pdf", "apk", "zip"]),
     ]
+
     for regex, weight, reason, words in checks:
         if regex.search(txt):
             score += weight
             reasons.append(reason)
             kws.extend(words[:2])
 
+    # ---- LINK RISK ----
     link_score, link_reasons, link_keywords = link_risk(txt)
     score += link_score
     reasons.extend(link_reasons)
     kws.extend(link_keywords)
 
+    # ---- FINANCIAL PROMO FIX ----
+    has_financial_promo = bool(FINANCIAL_PROMO_RE.search(txt))
+
+    if has_financial_promo:
+        score += 10
+        reasons.append("Financial promotional / investment lure language detected")
+        kws.append("financial_promo")
+
+        # ✅ ONLY when BOTH present
+        if urls:
+            score += 12
+            reasons.append("Financial promo combined with external link")
+
+    # ---- SENDER ----
     sender_score, sender_reasons = sender_reputation(sender_name, sender_id, txt)
     score += sender_score
     reasons.extend(sender_reasons)
 
-    if "otp" in txt.lower() and any(x in txt.lower() for x in ["share", "send", "tell", "give", "confirm"]):
+    # ---- EXTRA HEURISTICS ----
+    txt_lower = txt.lower()
+
+    if "otp" in txt_lower and any(x in txt_lower for x in ["share", "send", "tell", "give", "confirm"]):
         score += 15
         reasons.append("OTP disclosure request phrasing")
         kws.append("share OTP")
-    if any(x in txt.lower() for x in ["refund", "cashback", "reward"]) and any(x in txt.lower() for x in ["click", "tap", "login", "verify"]):
+
+    if any(x in txt_lower for x in ["refund", "cashback", "reward"]) and any(x in txt_lower for x in ["click", "tap", "login", "verify"]):
         score += 10
         reasons.append("Financial lure combined with action request")
-    if len(txt) < 25 and any(x in txt.lower() for x in ["verify", "update", "urgent"]):
+
+    if len(txt) < 25 and any(x in txt_lower for x in ["verify", "update", "urgent"]):
         score += 5
         reasons.append("Abrupt message style with action pressure")
 
+    # ---- USE find_keywords() (FINAL STEP) ----
+    kws.extend(find_keywords(txt))
+
     score = min(score, 100)
+
     return {
         "rule_score": score,
         "reasons": list(dict.fromkeys(reasons)),

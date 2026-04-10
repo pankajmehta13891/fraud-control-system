@@ -4,7 +4,8 @@ def mask_phone(phone: str) -> str:
     digits = ''.join(ch for ch in phone if ch.isdigit())
     if len(digits) <= 4:
         return "*" * len(digits)
-    return digits[:2] + "X" * max(0, len(digits)-6) + digits[-4:]
+    return digits[:2] + "X" * max(0, len(digits) - 6) + digits[-4:]
+
 
 def mask_email(email: str) -> str:
     if not email or "@" not in email:
@@ -15,6 +16,7 @@ def mask_email(email: str) -> str:
     else:
         name_masked = name[:2] + "***"
     return f"{name_masked}@{domain}"
+
 
 def mask_account(acct: str) -> str:
     if not acct:
