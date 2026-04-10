@@ -116,9 +116,6 @@ def _host_and_path(url: str):
 
 
 def suspicious_url_indicators(url: str):
-    """
-    Return (score, reasons, keywords) for URL-level risk signals.
-    """
     score = 0
     reasons = []
     keywords = []
@@ -130,28 +127,41 @@ def suspicious_url_indicators(url: str):
         return 0, reasons, keywords
 
     if SHORT_LINK_RE.search(host):
-        score += 30
+        score += 40
         reasons.append("Shortened URL detected")
         keywords.append(host)
 
     suspicious_tlds = (".ru", ".xyz", ".top", ".biz", ".click", ".tk", ".fit", ".buzz", ".loan")
     if any(host.endswith(tld) for tld in suspicious_tlds):
-        score += 12
+        score += 25
         reasons.append("Suspicious TLD detected")
         keywords.append(host)
+
+    # 🔥 NEW
+    trusted_domains = ("amazon", "flipkart", "google", "youtube", "paytm", "phonepe")
+    if not any(td in host for td in trusted_domains):
+        score += 10
+        reasons.append("Unknown/untrusted domain")
 
     if "xn--" in host:
         score += 15
         reasons.append("Punycode domain detected")
         keywords.append(host)
 
-    if re.search(r'(?:^|/)[a-z0-9]{8,}(?:/|$)', path):
-        score += 8
+    if re.search(r'(?:^|/)[a-z0-9]{5,}(?:/|$)', path):
+        score += 15
         reasons.append("Random-looking path token detected")
 
     if re.search(r'[a-z]{2,}\d{2,}|\d{2,}[a-z]{2,}', path):
-        score += 6
+        score += 10
         reasons.append("Mixed alphanumeric token in URL path")
+
+    # 🔥 NEW (CRITICAL)
+    phishing_keywords = ["verify", "login", "secure", "update", "account", "bank", "otp"]
+    if any(k in path for k in phishing_keywords):
+        score += 20
+        reasons.append("Phishing keyword in URL path")
+        keywords.append(path)
 
     if re.search(r'\b(?:bank|upi|rbi|kyc|refund|otp|verify|secure|login|support)\b', full, re.I):
         score += 20
@@ -163,7 +173,6 @@ def suspicious_url_indicators(url: str):
         reasons.append("Long tokenized URL path")
 
     return min(score, 100), list(dict.fromkeys(reasons)), list(dict.fromkeys([k for k in keywords if k]))
-
 
 def find_keywords(text: str):
     body = text or ""
